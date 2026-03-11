@@ -1,0 +1,24 @@
+# minidispatch: Slurm SSH bridge
+# Usage: minidispatch examples/slurm_config.yaml examples/slurm_tasks.yaml
+batch_type: slurm
+context_type: ssh
+local_root: /Users/bruce/Nutstore Files/Nutstore/claude/minidispatch/test_slurm
+remote_root: /gpfs/work/che/zhenghaowu/test_slurm
+remote_profile:
+  hostname: 10.7.88.95
+  username: zhenghaowu
+  port: 22
+cpu_per_node: 1
+gpu_per_node: 0
+queue_name: cpu8358
+para_job: 2
+if_cuda_multi_devices: false
+module_list: [lammps]
+source_list: []
+envs:
+  OMP_NUM_THREADS: "1"
+clean: true
+custom_flags:
+  - "#SBATCH --time=01:00:00"
+  - "#SBATCH --mem=16G"
+  - "#SBATCH --qos=52cores"

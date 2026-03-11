@@ -1,0 +1,11 @@
+work_base: my_work
+forward_common_files: []
+tasks:
+  - command: echo "Hello from task 0" && sleep 2
+    task_work_path: task_000
+    forward_files: []
+    backward_files: [log]
+  - command: echo "Hello from task 1" && sleep 2
+    task_work_path: task_001
+    forward_files: []
+    backward_files: [log]

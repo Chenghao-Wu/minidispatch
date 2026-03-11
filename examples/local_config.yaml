@@ -1,0 +1,8 @@
+# minidispatch: local shell bridge
+# Usage: minidispatch examples/local_config.yaml examples/local_tasks.yaml
+batch_type: shell
+context_type: local
+local_root: /Users/bruce/Nutstore Files/Nutstore/claude/minidispatch/local
+remote_root: /Users/bruce/Nutstore Files/Nutstore/claude/minidispatch/remote
+envs:
+  OMP_NUM_THREADS: "4"

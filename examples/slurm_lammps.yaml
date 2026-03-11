@@ -1,0 +1,7 @@
+work_base: my_lmp
+forward_common_files: []
+tasks:
+  - command: lmp -i water_lammps.inp
+    task_work_path: task_lmp
+    forward_files: ["water_lammps.inp", "SPCE_water.data"]
+    backward_files: ["*"]
