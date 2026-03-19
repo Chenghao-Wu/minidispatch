@@ -57,8 +57,10 @@ class Slurm(Backend):
         return job_id
 
     def check_status(self, job: Job) -> JobStatus:
+        if self.check_finish_tag(job):
+            return JobStatus.finished
         if job.job_id == "":
-            return JobStatus.unsubmitted
+            return job.job_state or JobStatus.unsubmitted
         cmd = f'squeue -o "%.18i %.2t" -j {job.job_id}'
         ret, stdout, stderr = self.context.block_call(cmd)
         if ret != 0:
@@ -129,9 +131,7 @@ class Slurm(Backend):
             content = self.context.read_file(slurm_out).strip()
             if content:
                 lines = content.splitlines()[-20:]
-                parts.append(
-                    f"slurm output ({slurm_out}):\n" + "\n".join(lines)
-                )
+                parts.append(f"slurm output ({slurm_out}):\n" + "\n".join(lines))
         return "\n".join(parts)
 
     def gen_script(self, job: Job) -> str:
