@@ -37,8 +37,10 @@ class Shell(Backend):
         return job_id
 
     def check_status(self, job: Job) -> JobStatus:
+        if self.check_finish_tag(job):
+            return JobStatus.finished
         if job.job_id == "":
-            return JobStatus.unsubmitted
+            return job.job_state or JobStatus.unsubmitted
         cmd = (
             f"if ps -p {job.job_id} > /dev/null 2>&1 && "
             f"! (ps -o command -p {job.job_id} 2>/dev/null "
@@ -48,10 +50,6 @@ class Shell(Backend):
         ret, stdout, stderr = self.context.block_call(cmd)
         if ret != 0:
             raise RuntimeError(f"Status check failed (rc={ret}): {stderr}")
-
-        if self.check_finish_tag(job):
-            log.info(f"Job {job.job_hash} {job.job_id} finished")
-            return JobStatus.finished
 
         if stdout.strip():
             return JobStatus.running

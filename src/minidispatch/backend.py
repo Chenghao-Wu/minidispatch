@@ -33,7 +33,7 @@ cd "$REMOTE_ROOT"
 cd {task_work_path}
 test $? -ne 0 && exit 1
 if [ ! -f {task_tag_finished} ] ;then
-  {command_env} ( {command} ) {log_err_part}
+  {truncate_logs_part}{command_env} ( {command} ) {log_err_part}
   if test $? -eq 0; then touch {task_tag_finished}
   else echo 1 > "$REMOTE_ROOT"/{flag_if_job_task_fail};fi
 fi &
@@ -157,6 +157,12 @@ class Backend(ABC):
             if task.errlog is not None:
                 log_err_part += f"2>>{shlex.quote(task.errlog)} "
 
+            truncate_logs_part = ""
+            if task.outlog:
+                truncate_logs_part += f": > {shlex.quote(task.outlog)}\n  "
+            if task.errlog:
+                truncate_logs_part += f": > {shlex.quote(task.errlog)}\n  "
+
             flag_if_job_task_fail = job.job_hash + "_flag_if_job_task_fail"
             single = script_command_template.format(
                 flag_if_job_task_fail=flag_if_job_task_fail,
@@ -167,6 +173,7 @@ class Backend(ABC):
                 command=task.command,
                 task_tag_finished=task_tag_finished,
                 log_err_part=log_err_part,
+                truncate_logs_part=truncate_logs_part,
             )
             script_command += single
         return script_command

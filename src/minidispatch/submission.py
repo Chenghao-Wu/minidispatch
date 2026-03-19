@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import shlex
 import time
 from collections import Counter
 from hashlib import sha1
@@ -107,7 +109,6 @@ class Submission:
             self.tasks = [t for j in self.jobs for t in j.tasks]
             for job in self.jobs:
                 if job.job_state != JobStatus.finished:
-                    job.fail_count = 0
                     job.job_state = JobStatus.unsubmitted
                     job.job_id = ""
                     for task in job.tasks:
@@ -174,6 +175,7 @@ class Submission:
                     f"Job {job.job_hash} terminated "
                     f"(fail #{job.fail_count}), resubmitting"
                 )
+                self._clean_task_outputs(job)
                 self._submit_job(job)
             elif job.job_state == JobStatus.unknown:
                 raise RuntimeError(f"Job {job.job_hash} in unknown state")
@@ -187,6 +189,27 @@ class Submission:
         else:
             job.job_state = JobStatus.unsubmitted
             log.warning(f"Job {job.job_hash[:12]} submission returned empty job_id")
+
+    def _clean_task_outputs(self, job: Job) -> None:
+        """Remove backward-only files and logs from remote task dir before retry."""
+        for task in job.tasks:
+            forward_set = set(task.forward_files)
+            backward_only = [p for p in task.backward_files if p not in forward_set]
+            files_to_clean = list(backward_only)
+            if task.outlog and task.outlog not in forward_set:
+                files_to_clean.append(task.outlog)
+            if task.errlog and task.errlog not in forward_set:
+                files_to_clean.append(task.errlog)
+            if not files_to_clean:
+                continue
+            task_dir = os.path.join(
+                self.backend.context.remote_root,  # type: ignore[attr-defined]
+                task.task_work_path,
+            )
+            patterns = " ".join(files_to_clean)
+            self.backend.context.block_call(
+                f"cd {shlex.quote(task_dir)} && rm -rf {patterns} 2>/dev/null || true"
+            )
 
     # --- Main run loop ---
 
@@ -214,16 +237,27 @@ class Submission:
             self._download_and_finish(clean)
             return self.serialize()
 
-        # 4. Upload
-        log.info("Uploading forward files")
-        self.backend.context.upload(self.tasks, self.forward_common_files)
+        # 4. Clean backward files for unfinished jobs before upload (recovery only)
+        if os.path.isdir(self.backend.context.remote_root):  # type: ignore[attr-defined]
+            for job in self.jobs:
+                if job.job_state != JobStatus.finished:
+                    self._clean_task_outputs(job)
+
+        # 5. Upload (only unfinished tasks)
+        unfinished_tasks = [
+            t for j in self.jobs if j.job_state != JobStatus.finished for t in j.tasks
+        ]
+        log.info(
+            f"Uploading forward files ({len(unfinished_tasks)}/{len(self.tasks)} tasks)"
+        )
+        self.backend.context.upload(unfinished_tasks, self.forward_common_files)
         log.info("Upload complete")
 
-        # 5. Submit
+        # 6. Submit
         self._handle_job_states(max_retries)
         self.save_state()
 
-        # 6. Poll
+        # 7. Poll
         log.info(
             f"Polling jobs (interval={check_interval}s, max_retries={max_retries})"
         )
@@ -243,7 +277,7 @@ class Submission:
             self.save_state()
             raise
 
-        # 7. Download
+        # 8. Download
         log.info("Downloading backward files")
         self._download_and_finish(clean)
         log.info(f"Submission {self.submission_hash} completed successfully")
@@ -267,21 +301,16 @@ class Submission:
                         )
                         log.error(
                             f"Task {task.task_work_path} stderr"
-                            f" ({task.errlog}):\n{prefix}"
-                            + "\n".join(tail)
+                            f" ({task.errlog}):\n{prefix}" + "\n".join(tail)
                         )
             except Exception as e:
-                log.debug(
-                    f"Could not read errlog for {task.task_work_path}: {e}"
-                )
+                log.debug(f"Could not read errlog for {task.task_work_path}: {e}")
         try:
             exit_info = self.backend.get_exit_info(job)
             if exit_info:
                 log.error(f"Job {job.job_hash[:12]} exit info:\n{exit_info}")
         except Exception as e:
-            log.debug(
-                f"Could not get exit info for {job.job_hash[:12]}: {e}"
-            )
+            log.debug(f"Could not get exit info for {job.job_hash[:12]}: {e}")
 
     def _download_and_finish(self, clean: bool) -> None:
         self.backend.context.download(self.tasks)
