@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import json
-import random
 import time
 from collections import Counter
 from hashlib import sha1
@@ -83,16 +82,8 @@ class Submission:
         if task_num == 0:
             raise RuntimeError("Must have at least 1 task")
 
-        random.seed(42)
-        indices = list(range(task_num))
-        random.shuffle(indices)
-        for idx in indices:
-            self.jobs.append(
-                Job(
-                    tasks=[self.tasks[idx]],
-                    resources=copy.deepcopy(self.resources),
-                )
-            )
+        for task in self.tasks:
+            self.jobs.append(Job(tasks=[task], resources=copy.deepcopy(self.resources)))
         log.info(f"Generated {len(self.jobs)} jobs from {len(self.tasks)} tasks")
 
     # --- Recovery ---
@@ -205,6 +196,7 @@ class Submission:
         check_interval: int = 10,
         max_retries: int = 3,
         clean: bool = True,
+        progress: bool = True,
     ) -> dict:
         log.info(f"Starting submission {self.submission_hash}")
 
@@ -236,7 +228,7 @@ class Submission:
             f"Polling jobs (interval={check_interval}s, max_retries={max_retries})"
         )
         try:
-            with tqdm(total=len(self.jobs), desc="Jobs") as pbar:
+            with tqdm(total=len(self.jobs), desc="Jobs", disable=not progress) as pbar:
                 while not self._all_finished():
                     time.sleep(check_interval)
                     self._update_job_states()
